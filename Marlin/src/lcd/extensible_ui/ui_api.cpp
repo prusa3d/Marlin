@@ -866,7 +866,7 @@ namespace ExtUI {
     enableHeater(heater);
     #if HAS_HEATED_BED
       if (heater == BED)
-        thermalManager.setTargetBed(constrain(value, 0, BED_MAXTEMP - 10));
+        thermalManager.setTargetBed(constrain(value, 0, BED_MAXTEMP - BED_MAXTEMP_SAFETY_MARGIN));
       else
     #endif
       {
