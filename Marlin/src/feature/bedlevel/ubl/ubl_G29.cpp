@@ -338,7 +338,7 @@
           }
           z_values[cpos.x][cpos.y] = NAN;
           #if ENABLED(EXTENSIBLE_UI)
-            ExtUI::onMeshUpdate(closest, 0);
+            ExtUI::onMeshUpdate(closest.pos.x, closest.pos.y, 0);
           #endif
           cnt++;
         }
@@ -541,7 +541,7 @@
                 else {
                   z_values[cpos.x][cpos.y] = g29_constant;
                   #if ENABLED(EXTENSIBLE_UI)
-                    ExtUI::onMeshUpdate(closest, g29_constant);
+                    ExtUI::onMeshUpdate(closest.pos.x, closest.pos.y, g29_constant);
                   #endif
                 }
               }
@@ -664,6 +664,13 @@
     if (parser.seen('T'))
       display_map(g29_map_type);
 
+    if (!parser.seen_any()) {
+        // backward compatibility with ABL
+        gcode.process_subcommands_now_P("G29 P1 E");
+        gcode.process_subcommands_now_P("G29 P3");
+        gcode.process_subcommands_now_P("G29 A");
+    }
+
     LEAVE:
 
     #if HAS_LCD_MENU
@@ -746,7 +753,6 @@
       #endif
 
       save_ubl_active_state_and_disable();  // No bed level correction so only raw data is obtained
-      DEPLOY_PROBE();
 
       uint8_t count = GRID_MAX_POINTS;
 
@@ -783,14 +789,12 @@
                       );
           z_values[best.pos.x][best.pos.y] = measured_z;
           #if ENABLED(EXTENSIBLE_UI)
-            ExtUI::onMeshUpdate(best, measured_z);
+            ExtUI::onMeshUpdate(best.pos.x, best.pos.y, measured_z);
           #endif
         }
         SERIAL_FLUSH(); // Prevent host M105 buffer overrun.
 
       } while (best.pos.x >= 0 && --count);
-
-      STOW_PROBE();
 
       #ifdef Z_AFTER_PROBING
         move_z_after_probing();
@@ -1335,7 +1339,7 @@
         if (!isnan(v2)) {
           z_values[x][y] = v1 < v2 ? v1 : v1 + v1 - v2;
           #if ENABLED(EXTENSIBLE_UI)
-            ExtUI::onMeshUpdate(x, y, z_values[pos.x][pos.y]);
+            ExtUI::onMeshUpdate(x, y, z_values[x][y]);
           #endif
           return true;
         }
