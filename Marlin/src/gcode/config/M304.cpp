@@ -26,8 +26,9 @@
 
 #include "../gcode.h"
 #include "../../module/temperature.h"
-
+extern float PID_FUNCTIONAL_RANGE_BED;
 void GcodeSuite::M304() {
+  if (parser.seen('R')) PID_FUNCTIONAL_RANGE_BED = parser.value_float();
   if (parser.seen('P')) thermalManager.temp_bed.pid.Kp = parser.value_float();
   if (parser.seen('I')) thermalManager.temp_bed.pid.Ki = scalePID_i(parser.value_float());
   if (parser.seen('D')) thermalManager.temp_bed.pid.Kd = scalePID_d(parser.value_float());
@@ -35,7 +36,8 @@ void GcodeSuite::M304() {
   SERIAL_ECHO_START();
   SERIAL_ECHOLNPAIR(" p:", thermalManager.temp_bed.pid.Kp,
                     " i:", unscalePID_i(thermalManager.temp_bed.pid.Ki),
-                    " d:", unscalePID_d(thermalManager.temp_bed.pid.Kd));
+                    " d:", unscalePID_d(thermalManager.temp_bed.pid.Kd),
+                    " RANGE:", PID_FUNCTIONAL_RANGE_BED);
 }
 
 #endif // PIDTEMPBED

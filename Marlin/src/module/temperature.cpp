@@ -76,6 +76,10 @@
   #include "../libs/buzzer.h"
 #endif
 
+
+float PID_FUNCTIONAL_RANGE_NOZ = 10
+float PID_FUNCTIONAL_RANGE_BED = 10;
+
 #if HOTEND_USES_THERMISTOR
   #if ENABLED(TEMP_SENSOR_1_AS_REDUNDANT)
     static void* heater_ttbl_map[2] = { (void*)HEATER_0_TEMPTABLE, (void*)HEATER_1_TEMPTABLE };
@@ -800,7 +804,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
         float pid_output;
 
         if (temp_hotend[ee].target == 0
-          || pid_error < -(PID_FUNCTIONAL_RANGE)
+          || pid_error < -(PID_FUNCTIONAL_RANGE_NOZ)
           #if HEATER_IDLE_HANDLER
             || hotend_idle[ee].timed_out
           #endif
@@ -808,7 +812,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
           pid_output = 0;
           pid_reset[ee] = true;
         }
-        else if (pid_error > PID_FUNCTIONAL_RANGE) {
+        else if (pid_error > PID_FUNCTIONAL_RANGE_NOZ) {
           pid_output = BANG_MAX;
           pid_reset[ee] = true;
         }
@@ -912,11 +916,11 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
       const float max_power_over_i_gain = float(MAX_BED_POWER) / temp_bed.pid.Ki - float(MIN_BED_POWER),
                   pid_error = temp_bed.target - temp_bed.celsius;
 
-      if (!temp_bed.target || pid_error < -(PID_FUNCTIONAL_RANGE)) {
+      if (!temp_bed.target || pid_error < -(PID_FUNCTIONAL_RANGE_BED)) {
         pid_output = 0;
         pid_reset = true;
       }
-      else if (pid_error > PID_FUNCTIONAL_RANGE) {
+      else if (pid_error > PID_FUNCTIONAL_RANGE_BED) {
         pid_output = MAX_BED_POWER;
         pid_reset = true;
       }

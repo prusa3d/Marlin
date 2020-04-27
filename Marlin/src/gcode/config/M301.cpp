@@ -39,8 +39,9 @@
  *   C[float] Kc term
  *   L[int] LPQ length
  */
+extern float PID_FUNCTIONAL_RANGE_NOZ;
 void GcodeSuite::M301() {
-
+  if (parser.seen('R')) PID_FUNCTIONAL_RANGE_NOZ = parser.value_float();
   // multi-extruder PID patch: M301 updates or prints a single extruder's PID values
   // default behavior (omitting E parameter) is to update for extruder 0 only
   const uint8_t e = parser.byteval('E'); // extruder being updated
@@ -63,7 +64,8 @@ void GcodeSuite::M301() {
     #endif // PID_PARAMS_PER_HOTEND
     SERIAL_ECHOPAIR(" p:", PID_PARAM(Kp, e),
                     " i:", unscalePID_i(PID_PARAM(Ki, e)),
-                    " d:", unscalePID_d(PID_PARAM(Kd, e)));
+                    " d:", unscalePID_d(PID_PARAM(Kd, e)),
+                    " RANGE:", PID_FUNCTIONAL_RANGE_NOZ);
     #if ENABLED(PID_EXTRUSION_SCALING)
       //Kc does not have scaling applied above, or in resetting defaults
       SERIAL_ECHOPAIR(" c:", PID_PARAM(Kc, e));
