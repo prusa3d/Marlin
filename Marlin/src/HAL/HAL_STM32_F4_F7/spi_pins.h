@@ -17,6 +17,7 @@
  *
  */
 #pragma once
+#include "main.h"
 
 /**
  * Define SPI Pins: SCK, MISO, MOSI, SS
@@ -31,5 +32,6 @@
   #define MOSI_PIN  PA7
 #endif
 #ifndef SS_PIN
-  #define SS_PIN    PA8
+  #define SS_PIN    (Z_MIN_GPIO_Port + Z_MIN_Pin)
+  #warning "I don't know what is SS and why it was defined same as Z min."
 #endif
