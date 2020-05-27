@@ -64,21 +64,6 @@ static SPISettings spiConfig;
  * VGPV SPI speed start and F_CPU/2, by default 72/2 = 36Mhz
  */
 
-/**
- * @brief  Begin SPI port setup
- *
- * @return Nothing
- *
- * @details Only configures SS pin since libmaple creates and initialize the SPI object
- */
-void spiBegin() {
-  #if !defined(SS_PIN) || SS_PIN < 0
-    #error SS_PIN not defined!
-  #endif
-
-  OUT_WRITE(SS_PIN, HIGH);
-}
-
 /** Configure SPI for specified SPI speed */
 void spiInit(uint8_t spiRate) {
   // Use datarates Marlin uses
