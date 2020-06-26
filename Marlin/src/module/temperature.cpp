@@ -271,7 +271,7 @@ volatile bool Temperature::temp_meas_ready = false;
 
 #if ENABLED(PID_EXTRUSION_SCALING)
   uint32_t Temperature::last_e_position;
-  bool Temperature::extrusion_scaling_enabled;
+  bool Temperature::extrusion_scaling_enabled = true;
 #endif
 
 #define TEMPDIR(N) ((HEATER_##N##_RAW_LO_TEMP) < (HEATER_##N##_RAW_HI_TEMP) ? 1 : -1)
