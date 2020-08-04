@@ -795,37 +795,43 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
 }
 
 #if HOTENDS
-  #if ANY(FEED_FORWARD_HOTEND_REGULATOR, PID_EXTRUSION_SCALING)
-    static constexpr float sample_frequency = TEMP_TIMER_FREQUENCY / MIN_ADC_ISR_LOOPS / OVERSAMPLENR;
-    static constexpr float ambient_temp = 21.0f;
-  #endif
-  #if ENABLED(FEED_FORWARD_HOTEND_REGULATOR)
+  #if ((FAN_COUNT > 0) && ENABLED(PIDTEMP))
 
-    //! @brief Get feed forward steady state output hotend
+    static constexpr float ambient_temp = 21.0f;
+    //! @brief Get steady state output needed to compensate hotend cooling
     //!
     //! steady state output:
-    //! ((target_temp - ambient_temp) * 0.322 + (target_temp - ambient_temp)^2 * 0.0002 * (1 - print_fan)) * SQRT(1 + print_fan * 3.9)
+    //! ((target_temp - ambient_temp) * STEADY_STATE_HOTEND_LINEAR_COOLING_TERM
+    //! + (target_temp - ambient_temp)^2 * STEADY_STATE_HOTEND_QUADRATIC_COOLING_TERM * (1 - print_fan))
+    //! * SQRT(1 + print_fan * STEADY_STATE_HOTEND_FAN_COOLING_TERM)
     //! temperatures in degrees (Celsius or Kelvin)
     //! @param target_temp target temperature in degrees Celsius
     //! @param print_fan print fan power in range 0.0 .. 1.0
     //! @return hotend PWM in range 0 .. 255
 
-    static float ff_steady_state_hotend(float target_temp, float print_fan) {
+    static float steady_state_hotend(float target_temp, float print_fan) {
       static_assert(PID_MAX == 255, "PID_MAX == 255 expected");
       // TODO Square root computation can be mostly avoided by if stored and updated only on print_fan change
       const float tdiff = target_temp - ambient_temp;
-      const float retval = (tdiff * 0.322 + sq(tdiff) * 0.0002 * (1 - print_fan)) * SQRT(1 + print_fan * 3.9);
+      const float retval = (tdiff * STEADY_STATE_HOTEND_LINEAR_COOLING_TERM
+              + sq(tdiff) * STEADY_STATE_HOTEND_QUADRATIC_COOLING_TERM * (1 - print_fan))
+              * SQRT(1 + print_fan * STEADY_STATE_HOTEND_FAN_COOLING_TERM);
       return _MAX(retval, 0);
     }
+  #endif //((FAN_COUNT > 0) && ENABLED(PIDTEMP))
+  #if ANY(MODEL_BASED_HOTEND_REGULATOR, PID_EXTRUSION_SCALING)
+    static constexpr float sample_frequency = TEMP_TIMER_FREQUENCY / MIN_ADC_ISR_LOOPS / OVERSAMPLENR;
+  #endif
+  #if ENABLED(MODEL_BASED_HOTEND_REGULATOR)
 
-    //! @brief Get feed forward output hotend
+    //! @brief Get model output hotend
     //!
     //! @param last_target Target temperature for this cycle
     //! (Can not be measured due to transport delay)
     //! @param expected Expected measurable hotend temperature in this cycle
     //! @param E_NAME hotend index
 
-    float Temperature::get_ff_output_hotend(float &last_target, float &expected, const uint8_t E_NAME) {
+    float Temperature::get_model_output_hotend(float &last_target, float &expected, const uint8_t E_NAME) {
       const uint8_t ee = HOTEND_INDEX;
 
       enum class Ramp : uint_least8_t {
@@ -856,7 +862,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
         //! with generated temperature curve in less than ideal conditions
         constexpr float target_heater_pwm = PID_MAX - 10;
         const float temp_diff = deg_per_cycle * pid_max_inv
-            * (target_heater_pwm - ff_steady_state_hotend(last_target, fan_speed[0] * pid_max_inv));
+            * (target_heater_pwm - steady_state_hotend(last_target, fan_speed[0] * pid_max_inv));
         last_target += temp_diff;
         if (delay > 1) --delay;
         expected += temp_diff / delay;
@@ -870,7 +876,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
           state = Ramp::Down;
         }
         const float temp_diff = deg_per_cycle * pid_max_inv
-            * ff_steady_state_hotend(last_target, fan_speed[0] * pid_max_inv);
+            * steady_state_hotend(last_target, fan_speed[0] * pid_max_inv);
         last_target -= temp_diff;
         if (delay > 1) --delay;
         expected -= temp_diff / delay;
@@ -892,7 +898,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
           expected += diff;
         }
         else expected = last_target;
-        hotend_pwm = ff_steady_state_hotend(last_target, fan_speed[0] * pid_max_inv);
+        hotend_pwm = steady_state_hotend(last_target, fan_speed[0] * pid_max_inv);
       }
       return hotend_pwm;
     }
@@ -930,7 +936,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
               expected_temp = temp_hotend[ee].celsius;
               pid_reset[ee] = false;
             }
-            const float feed_forward = get_ff_output_hotend(target_temp, expected_temp, ee);
+            const float feed_forward = get_model_output_hotend(target_temp, expected_temp, ee);
             #if ENABLED(PID_DEBUG)
             feed_forward_debug = feed_forward;
             #endif
@@ -1018,7 +1024,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
 
       return pid_output;
     }
-  #else // not FEED_FORWARD_HOTEND_REGULATOR
+  #else // not MODEL_BASED_HOTEND_REGULATOR
     float Temperature::get_pid_output_hotend(const uint8_t E_NAME) {
       const uint8_t ee = HOTEND_INDEX;
       #if ENABLED(PIDTEMP)
@@ -1030,6 +1036,9 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
           const float pid_error = temp_hotend[ee].target - temp_hotend[ee].celsius;
 
           float pid_output;
+          #if ENABLED(PID_DEBUG)
+            float feed_forward_debug = -1.0f;
+          #endif
 
           if (temp_hotend[ee].target == 0
             || pid_error < -(PID_FUNCTIONAL_RANGE)
@@ -1048,16 +1057,19 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
             if (pid_reset[ee]) {
               temp_iState[ee] = 0.0;
               work_pid[ee].Kd = 0.0;
+              temp_dState[ee] = pid_error;
               pid_reset[ee] = false;
             }
 
-            work_pid[ee].Kd = work_pid[ee].Kd + PID_K2 * (PID_PARAM(Kd, ee) * (temp_dState[ee] - temp_hotend[ee].celsius) - work_pid[ee].Kd);
-            const float max_power_over_i_gain = float(PID_MAX) / PID_PARAM(Ki, ee) - float(MIN_POWER);
-            temp_iState[ee] = constrain(temp_iState[ee] + pid_error, 0, max_power_over_i_gain);
+            static constexpr float pid_max_inv = 1.0f / PID_MAX;
+            const float feed_forward = steady_state_hotend(temp_hotend[ee].target, fan_speed[0] * pid_max_inv);
+            #if ENABLED(PID_DEBUG)
+              feed_forward_debug = feed_forward;
+            #endif
+            work_pid[ee].Kd = work_pid[ee].Kd + PID_K2 * (PID_PARAM(Kd, ee) * (pid_error - temp_dState[ee]) - work_pid[ee].Kd);
             work_pid[ee].Kp = PID_PARAM(Kp, ee) * pid_error;
-            work_pid[ee].Ki = PID_PARAM(Ki, ee) * temp_iState[ee];
 
-            pid_output = work_pid[ee].Kp + work_pid[ee].Ki + work_pid[ee].Kd + float(MIN_POWER);
+            pid_output = work_pid[ee].Kp + feed_forward + float(MIN_POWER);
 
             #if ENABLED(PID_EXTRUSION_SCALING)
               #if HOTENDS == 1
@@ -1079,9 +1091,17 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
               }
             #endif // PID_EXTRUSION_SCALING
 
+            //Sum error only if it has effect on output value before D term is applied
+            if (!((((pid_output + work_pid[ee].Ki) < 0) && (pid_error < 0))
+               || (((pid_output + work_pid[ee].Ki) > PID_MAX) && (pid_error > 0 )))) {
+              temp_iState[ee] += pid_error;
+            }
+            work_pid[ee].Ki = PID_PARAM(Ki, ee) * temp_iState[ee];
+            pid_output += work_pid[ee].Ki + work_pid[ee].Kd;
+
             LIMIT(pid_output, 0, PID_MAX);
           }
-          temp_dState[ee] = temp_hotend[ee].celsius;
+          temp_dState[ee] = pid_error;
 
         #else // PID_OPENLOOP
 
@@ -1100,6 +1120,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
             #if DISABLED(PID_OPENLOOP)
             {
               SERIAL_ECHOPAIR(
+                " fTerm ", feed_forward_debug,
                 MSG_PID_DEBUG_PTERM, work_pid[ee].Kp,
                 MSG_PID_DEBUG_ITERM, work_pid[ee].Ki,
                 MSG_PID_DEBUG_DTERM, work_pid[ee].Kd
@@ -1126,7 +1147,7 @@ void Temperature::min_temp_error(const heater_ind_t heater) {
 
       return pid_output;
     }
-  #endif // FEED_FORWARD_HOTEND_REGULATOR
+  #endif // MODEL_BASED_HOTEND_REGULATOR
 #endif // HOTENDS
 
 #if ENABLED(PIDTEMPBED)
