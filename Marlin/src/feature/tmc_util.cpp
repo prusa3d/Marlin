@@ -21,6 +21,7 @@
  */
 
 #include "../inc/MarlinConfig.h"
+#include "bsod.h"
 
 #if HAS_TRINAMIC
 
@@ -1118,7 +1119,10 @@ void test_tmc_connection(const bool test_x, const bool test_y, const bool test_z
     #endif
   }
 
-  if (axis_connection) ui.set_status_P(GET_TEXT(MSG_ERROR_TMC));
+  if (axis_connection) {
+	  ui.set_status_P(GET_TEXT(MSG_ERROR_TMC));
+	  bsod(GET_TEXT(MSG_ERROR_TMC));
+  }
 }
 
 #endif // HAS_TRINAMIC
